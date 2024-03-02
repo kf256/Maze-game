@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+    </head>
+    <body>
+        <canvas id="canvas" width="1200" height="800">
+        </canvas>
+        <script>
+            let canvas = document.getElementById("canvas");
+            let ctx = canvas.getContext("2d");
+            
+            function createGrid(width, height, content) {
+                let result = [];
+                for (let y = 0; y < height; y++) {
+                    let row = [];
+                    for (let x = 0; x < width; x++) {
+                        row.push(content);
+                    }
+                    result.push(row);
+                }
+                return result;
+            }
+            
+            class Maze {
+                constructor(width, height) {
+                    this.width = width;
+                    this.height = height;
+                    
+                    this.movable = createGrid(4, 3, false);
+                    this.movable[0][0] = true;
+                    this.movable[2][3] = true;
+                    this.movable[1][0] = true;
+                    
+                    this.mw = this.movable[0].length;
+                    this.mh = this.movable.length;
+                    
+                    this.fixed = createGrid(this.width, this.height, false);
+                    
+                    this.posX = 0;
+                    this.posY = 0;
+                }
+                updatePossiblePositions() {
+                    this.possiblePositions = createGrid(this.width, this.height, true);
+                    for (let dx = 0; dx < this.mw; dx++) {
+                        for (let dy = 0; dy < this.mh; dy++) {
+                            if (!this.movable[dy][dx]) continue;
+                            for (let x = 0; x < this.width; x++) {
+                                for (let y = 0; y < this.height; y++) {
+                                    if (x+dx >= this.width || y+dy >= this.height || this.fixed[y+dy][x+dx]) this.possiblePositions[y][x] = false;
+                                }
+                            }
+                        }
+                    }
+                }
+                updateDist() {
+                    this.dist = createGrid(this.width, this.height, this.width*this.height);
+                    this.dist[0][0] = 0;
+                    
+                    let changed = [[0, 0]];
+                    while (changed.length != 0) {
+                        let changedNew = [];
+                        for (let j = 0; j < changed.length; j++) {
+                            let x = changed[j][0];
+                            let y = changed[j][1];
+                            
+                            let dist1 = this.dist[y][x]+1;
+                            if (dist1 == this.width*this.height) continue;
+                            
+                            for (let i = 0; i < 4; i++) {
+                                let dx, dy;
+                                if (i < 2) {
+                                    dx = 0;
+                                    dy = (i%2)*2-1;
+                                } else {
+                                    dx = (i%2)*2-1;
+                                    dy = 0;
+                                }
+                                
+                                if (x+dx < 0) continue;
+                                if (y+dy < 0) continue;
+                                if (x+dx >= this.width) continue;
+                                if (y+dy >= this.height) continue;
+                                if (!this.possiblePositions[y+dy][x+dx]) continue;
+                                
+                                let dist2 = this.dist[y+dy][x+dx];
+                                if (dist2 > dist1) {
+                                    changedNew.push([x+dx, y+dy]);
+                                    dist2 = dist1;
+                                }
+                                this.dist[y+dy][x+dx] = dist2;
+                            }
+                        }
+                        changed = changedNew;
+                    }
+                }
+                update() {
+                    this.updatePossiblePositions();
+                    this.updateDist();
+                }
+                draw() {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    let w = canvas.width/this.width;
+                    let h = canvas.height/this.height;
+                    
+                    ctx.save();
+                    ctx.scale(w, h);
+                    
+                    ctx.fillStyle = "black";
+                    for (let x = 0; x < this.width; x++) {
+                        for (let y = 0; y < this.height; y++) {
+                            if (!this.fixed[y][x]) continue;
+                            ctx.fillRect(x, y, 1, 1);
+                        }
+                    }
+                    
+                    ctx.fillStyle = "blue";
+                    for (let x = 0; x < this.mw; x++) {
+                        for (let y = 0; y < this.mh; y++) {
+                            if (this.movable[y][x]) {
+                                ctx.beginPath();
+                                ctx.ellipse(x+this.posX+0.5, y+this.posY+0.5, 0.5, 0.5, 0, 0, Math.PI*2);
+                                ctx.fill();
+                                ctx.closePath();
+                            }
+                        }
+                    }
+                    
+                    ctx.fillStyle = "green";
+                    let maxDist = 0;
+                    let maxX = 0;
+                    let maxY = 0;
+                    for (let x = 0; x < this.width; x++) {
+                        for (let y = 0; y < this.height; y++) {
+                            if (this.dist[y][x] == this.width*this.height) continue;
+                            if (this.dist[y][x] < maxDist) continue;
+                            maxDist = this.dist[y][x];
+                            maxX = x;
+                            maxY = y;
+                        }
+                    }
+                    for (let x = 0; x < this.mw; x++) {
+                        for (let y = 0; y < this.mh; y++) {
+                            if (this.movable[y][x]) {
+                                ctx.beginPath();
+                                ctx.ellipse(x+maxX+0.5, y+maxY+0.5, 0.3, 0.3, 0, 0, Math.PI*2);
+                                ctx.fill();
+                                ctx.closePath();
+                            }
+                        }
+                    }
+                    
+                    ctx.restore();
+                }
+                get maxDist() {
+                    let maxDist = 0;
+                    for (let x = 0; x < this.width; x++) {
+                        for (let y = 0; y < this.height; y++) {
+                            if (this.dist[y][x] == this.width*this.height) continue;
+                            if (this.dist[y][x] < maxDist) continue;
+                            maxDist = this.dist[y][x];
+                        }
+                    }
+                    return maxDist;
+                }
+                get countPossiblePositions() {
+                    let result = 0;
+                    for (let x = 0; x < this.width; x++) {
+                        for (let y = 0; y < this.height; y++) {
+                            if (this.possiblePositions[y][x]) result++;
+                        }
+                    }
+                    return result;
+                }
+                get distSum() {
+                    let sum = 0;
+                    for (let x = 0; x < this.width; x++) {
+                        for (let y = 0; y < this.height; y++) {
+                            if (!this.possiblePositions[y][x]) continue;
+                            if (this.dist[y][x] == this.width*this.height) continue;
+                            sum += this.dist[y][x];
+                        }
+                    }
+                    return sum;
+                }
+                get distCount() {
+                    let dataNumber = 0;
+                    for (let x = 0; x < this.width; x++) {
+                        for (let y = 0; y < this.height; y++) {
+                            if (!this.possiblePositions[y][x]) continue;
+                            if (this.dist[y][x] == this.width*this.height) continue;
+                            dataNumber++;
+                        }
+                    }
+                    return dataNumber;
+                }
+                get distCounts() {
+                    let dists = [];
+                    for (let x = 0; x < this.width; x++) {
+                        for (let y = 0; y < this.height; y++) {
+                            if (!this.possiblePositions[y][x]) continue;
+                            if (this.dist[y][x] == this.width*this.height) continue;
+                            if (!dists[this.dist[y][x]]) dists[this.dist[y][x]] = 0;
+                            dists[this.dist[y][x]]++;
+                        }
+                    }
+                    return dists;
+                }
+                get rating() {
+                    let dists = this.distCounts;
+                    let rating = 0;
+                    for (let i = 0; i < dists.length; i++) {
+                        if (s[i]) dists[i] -= s[i];
+                        if (dists[i] >= 0) rating++;
+                        if (dists[i] == 1) rating++;
+                    }
+                    return rating;
+                }
+            }
+            
+            let s = [];
+            let tested;
+            function test(maze) {
+                let x = Math.floor(Math.random()*maze.width);
+                let y = Math.floor(Math.random()*maze.height);
+                if (x < maze.mw && y < maze.mh && maze.movable[y][x]) return {x: x, y: y, r: -Infinity};
+                if (tested[y][x]) return {x: x, y: y, r: -Infinity};
+                else tested[y][x] = true;
+                maze.fixed[y][x] = !maze.fixed[y][x];
+                maze.update();
+                let rating = maze.rating;
+                maze.fixed[y][x] = !maze.fixed[y][x];
+                return {x: x, y: y, r: rating};
+            }
+            function create() {
+                let maze = new Maze(18, 12);
+                for (let x = 0; x < maze.width; x++) {
+                    for (let y = 0; y < maze.height; y++) {
+                        if (x < maze.mw && y < maze.mh && maze.movable[y][x]) continue;
+                        maze.fixed[y][x] = true;
+                    }
+                }
+                maze.update();
+                for (let n = 0; n < 10; n++) {
+                    let rating = maze.rating;
+                    tested = createGrid(maze.width, maze.height, false);
+                    for (let i = 0; i < 1000; i++) {
+                        let testResult = test(maze);
+                        if (testResult.r >= rating) {
+                            let improvement = (testResult.r > rating);
+                            rating = testResult.r;
+                            let x = testResult.x;
+                            let y = testResult.y;
+                            maze.fixed[y][x] = !maze.fixed[y][x];
+                            if (improvement) {
+                                i = 0;
+                                tested = createGrid(maze.width, maze.height, false);
+                            }
+                        }
+                    }
+                    s = maze.distCounts;
+                }
+                maze.draw();
+                return maze;
+            }
+            
+            let maze = create();
+            document.addEventListener("keydown", (event) => {
+                if (event.key == "ArrowUp") {
+                    if (maze.posY > 0 && maze.possiblePositions[maze.posY-1][maze.posX]) maze.posY--;
+                }
+                if (event.key == "ArrowLeft") {
+                    if (maze.posX > 0 && maze.possiblePositions[maze.posY][maze.posX-1]) maze.posX--;
+                }
+                if (event.key == "ArrowDown") {
+                    if (maze.posY < maze.height-1 && maze.possiblePositions[maze.posY+1][maze.posX]) maze.posY++;
+                }
+                if (event.key == "ArrowRight") {
+                    if (maze.posX < maze.width-1 && maze.possiblePositions[maze.posY][maze.posX+1]) maze.posX++;
+                }
+                maze.draw();
+            });
+        </script>
+    </body>
+</html>
